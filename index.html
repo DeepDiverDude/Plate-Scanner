@@ -3,47 +3,46 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PlateMaster 11.0 - Set Progress</title>
+    <title>PlateMaster 12.0 - Precision Edition</title>
     <style>
         :root { --ios-blue: #007AFF; --ios-green: #34C759; --ios-red: #FF3B30; --bg: #000; --card: #1c1c1e; }
         body { font-family: -apple-system, sans-serif; background: var(--bg); color: #fff; margin: 0; padding-bottom: 80px; }
         
+        /* Navigering */
         .tab-bar { position: fixed; bottom: 0; width: 100%; height: 65px; background: rgba(28,28,30,0.95); display: flex; justify-content: space-around; align-items: center; border-top: 1px solid #333; z-index: 1000; backdrop-filter: blur(10px); }
-        .tab { text-align: center; color: #888; font-size: 11px; flex-grow: 1; border: none; background: none; }
+        .tab { text-align: center; color: #888; font-size: 11px; flex-grow: 1; border: none; background: none; cursor: pointer; }
         .tab.active { color: var(--ios-blue); }
 
         .page { display: none; }
         .page.active { display: block; }
 
-        /* Skanner */
-        #cam-container { position: relative; height: 45vh; background: #000; }
+        /* Skanner-vy */
+        #cam-container { position: relative; height: 45vh; background: #000; overflow: hidden; }
         video { width: 100%; height: 100%; object-fit: cover; }
-        #sikte { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; height: 70px; border: 2px solid var(--ios-green); border-radius: 12px; pointer-events: none; }
         
-        .scan-status { padding: 15px; background: var(--card); border-bottom: 1px solid #333; }
-        
-        /* Redigerbar Target Box */
-        .target-box { 
-            background: var(--ios-red); padding: 10px 20px; border-radius: 12px; text-align: center; 
-            cursor: pointer; transition: transform 0.1s; 
+        /* Nytt sikte anpassat efter din bild */
+        #sikte { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            width: 85%; height: 60px; border: 2px solid rgba(255,255,255,0.3); border-radius: 5px; pointer-events: none;
         }
-        .target-box:active { transform: scale(0.95); background: #cc2f26; }
+        #sikte-eu { position: absolute; left: 0; top: 0; bottom: 0; width: 10%; background: rgba(0, 51, 153, 0.4); border-right: 1px solid #fff; }
+        #sikte-center { position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,0.2); }
 
-        /* Arkiv */
-        .search-container { padding: 15px; background: var(--bg); position: sticky; top: 0; z-index: 10; border-bottom: 1px solid #333; }
-        input { width: 100%; padding: 12px; border-radius: 10px; border: none; background: var(--card); color: #fff; font-size: 18px; box-sizing: border-box; text-align: center; }
+        .scan-status { padding: 15px; background: var(--card); display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; }
+        .target-box { background: var(--ios-red); padding: 10px 20px; border-radius: 12px; text-align: center; cursor: pointer; }
+
+        /* Arkiv & Redigering */
         .gallery { padding: 10px; }
         .plate-card { background: var(--card); border-radius: 16px; overflow: hidden; border: 1px solid #333; margin-bottom: 20px; }
-        .plate-card img { width: 100%; height: auto; display: block; }
+        .plate-card img { width: 100%; height: auto; }
         .plate-card-info { padding: 15px; }
-        
-        .actions { display: flex; gap: 10px; margin-top: 10px; }
-        .btn { flex: 1; padding: 12px; border-radius: 10px; border: none; font-weight: bold; font-size: 13px; text-align: center; text-decoration: none; cursor: pointer; }
+        .actions { display: flex; gap: 8px; margin-top: 12px; }
+        .btn { flex: 1; padding: 12px; border-radius: 10px; border: none; font-weight: bold; font-size: 13px; cursor: pointer; text-align: center; color: white; text-decoration: none; }
         .btn-edit { background: #3a3a3c; color: var(--ios-blue); }
         .btn-delete { background: #3a3a3c; color: var(--ios-red); }
-        .btn-map { background: var(--ios-blue); color: #fff; }
+        .btn-map { background: var(--ios-blue); }
 
-        #debug-log { font-family: monospace; font-size: 11px; color: #0f0; background: rgba(0,0,0,0.7); padding: 5px; position: absolute; bottom: 0; width: 100%; pointer-events: none; }
+        #debug-log { font-family: monospace; font-size: 10px; color: #0f0; background: rgba(0,0,0,0.8); padding: 4px; position: absolute; bottom: 0; width: 100%; z-index: 10; }
     </style>
 </head>
 <body>
@@ -51,27 +50,27 @@
     <div id="page-scan" class="page active">
         <div id="cam-container">
             <video id="video" autoplay playsinline></video>
-            <div id="sikte"></div>
-            <div id="debug-log">Väntar...</div>
+            <div id="sikte">
+                <div id="sikte-eu"></div>
+                <div id="sikte-center"></div>
+            </div>
+            <div id="debug-log">Väntar på kamera...</div>
         </div>
         <div class="scan-status">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                    <div style="font-size: 11px; color: #aaa;">IDENTIFIERAT</div>
-                    <div id="live-plate" style="font-size: 32px; font-weight: bold; color: var(--ios-green);">--- ---</div>
-                </div>
-                <!-- Klickbar box för att ändra nummer -->
-                <div class="target-box" onclick="setManualTarget()">
-                    <div style="font-size: 10px;">NÄSTA (ÄNDRA)</div>
-                    <div id="target-num" style="font-size: 32px; font-weight: bold;">001</div>
-                </div>
+            <div>
+                <div style="font-size: 10px; color: #aaa;">IDENTIFIERAT</div>
+                <div id="live-plate" style="font-size: 28px; font-weight: bold; color: var(--ios-green); letter-spacing: 2px;">--- ---</div>
+            </div>
+            <div class="target-box" onclick="setManualTarget()">
+                <div style="font-size: 9px; font-weight: bold;">NÄSTA</div>
+                <div id="target-num" style="font-size: 28px; font-weight: bold;">001</div>
             </div>
         </div>
     </div>
 
     <div id="page-archive" class="page">
-        <div class="search-container">
-            <input type="number" id="search-num" placeholder="Sök siffra..." oninput="renderArchive()">
+        <div style="padding: 15px;">
+            <input type="number" id="search-num" placeholder="Sök siffra (t.ex. 801)" style="width:100%; padding:15px; border-radius:12px; border:none; background:var(--card); color:#fff; font-size:18px; text-align:center;" oninput="renderArchive()">
         </div>
         <div id="gallery" class="gallery"></div>
     </div>
@@ -101,46 +100,30 @@
             if(id === 'archive') renderArchive();
         }
 
-        // --- MANUELL ÄNDRING AV NUMMER ---
-        function setManualTarget() {
-            const val = prompt("Vilket nummer vill du leta efter nu? (1-999)", currentTarget);
-            if (val !== null) {
-                const num = parseInt(val);
-                if (num >= 1 && num <= 999) {
-                    currentTarget = num;
-                    localStorage.setItem('plateTarget', currentTarget); // Spara valet
-                    updateTargetUI();
-                } else {
-                    alert("Ange ett nummer mellan 1 och 999.");
-                }
-            }
-        }
-
-        // --- INITIALISERING ---
-        const req = indexedDB.open("PlateMasterV11", 1);
+        // --- DB SETUP ---
+        const req = indexedDB.open("PlateMasterV12", 1);
         req.onupgradeneeded = e => {
             const store = e.target.result.createObjectStore("plates", { keyPath: "id", autoIncrement: true });
             store.createIndex("num", "num", { unique: false });
         };
         req.onsuccess = e => { 
             db = e.target.result; 
-            // Ladda sparat nummer från localStorage om det finns
             const saved = localStorage.getItem('plateTarget');
-            if (saved) {
-                currentTarget = parseInt(saved);
-            }
+            if (saved) currentTarget = parseInt(saved);
             updateTargetUI(); 
         };
 
+        // GPS
         navigator.geolocation.watchPosition(p => { lastPos = p.coords; }, null, { enableHighAccuracy: true });
 
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: 1920 } })
+        // KAMERA
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 } } })
             .then(s => { 
                 document.getElementById('video').srcObject = s; 
-                setInterval(doScan, 800); 
+                setInterval(doScan, 1000); 
             });
 
-        // --- SCANNING ---
+        // --- SKANNING & BILD-BEHANDLING ---
         async function doScan() {
             if (isProcessing || !db || !document.getElementById('page-scan').classList.contains('active')) return;
             isProcessing = true;
@@ -151,80 +134,96 @@
             const ctx = canvas.getContext('2d');
             ctx.drawImage(video, 0, 0);
 
+            // Utsnitt (Siktet)
             const ocrCanvas = document.getElementById('ocr-canvas');
-            const w = canvas.width * 0.7; const h = canvas.height * 0.15;
+            const w = canvas.width * 0.85; const h = 120; // Fast höjd för skärpa
             ocrCanvas.width = w; ocrCanvas.height = h;
             const oCtx = ocrCanvas.getContext('2d');
             oCtx.drawImage(canvas, (canvas.width-w)/2, (canvas.height-h)/2, w, h, 0, 0, w, h);
 
+            // BILD-FILTER: Öka skärpa och kontrast
+            const imgData = oCtx.getImageData(0,0,w,h);
+            const data = imgData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                const avg = (data[i] + data[i+1] + data[i+2]) / 3;
+                const val = avg > 110 ? 255 : 0; // Tröskelvärde
+                data[i] = data[i+1] = data[i+2] = val;
+            }
+            oCtx.putImageData(imgData, 0, 0);
+
             try {
-                const res = await Tesseract.recognize(ocrCanvas.toDataURL(), 'eng');
-                const raw = res.data.text.replace(/\s/g, '').toUpperCase();
+                const res = await Tesseract.recognize(ocrCanvas.toDataURL(), 'eng', {
+                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+                });
+                const raw = res.data.text.replace(/[^A-Z0-9]/g, '');
                 document.getElementById('debug-log').innerText = "AI SER: " + raw;
 
-                const match = raw.match(/[A-Z0-9]{6}/);
-                if (match) processPlate(match[0], canvas.toDataURL('image/jpeg', 0.5));
+                if (raw.length >= 6) {
+                    // Vi letar efter den sista 6-teckens sekvensen (för att undvika EU-märket i början)
+                    const potentialMatch = raw.substring(raw.length - 6);
+                    processPlate(potentialMatch, canvas.toDataURL('image/jpeg', 0.6));
+                }
             } catch (e) {}
             isProcessing = false;
         }
 
         function processPlate(raw, img) {
-            let part1 = raw.substring(0, 3).replace(/0/g, 'O').replace(/1/g, 'I').replace(/5/g, 'S').replace(/8/g, 'B');
-            let part2 = raw.substring(3, 6).replace(/O/g, '0').replace(/I/g, '1').replace(/L/g, '1').replace(/S/g, '5').replace(/B/g, '8');
-            const cleanPlate = part1 + part2;
+            // STRICT 3+3 FIX
+            let p1 = raw.substring(0, 3).replace(/0/g, 'O').replace(/1/g, 'I').replace(/5/g, 'S').replace(/8/g, 'B');
+            let p2 = raw.substring(3, 6).replace(/O/g, '0').replace(/I/g, '1').replace(/L/g, '1').replace(/S/g, '5').replace(/B/g, '8');
+            const clean = p1 + p2;
             
-            if (!/^[A-Z]{3}[0-9]{3}$/.test(cleanPlate)) return;
+            if (!/^[A-Z]{3}[0-9]{3}$/.test(clean)) return;
 
-            const numValue = parseInt(part2);
-            document.getElementById('live-plate').innerText = cleanPlate;
+            const numValue = parseInt(p2);
+            document.getElementById('live-plate').innerText = p1 + " " + p2;
 
-            const now = Date.now();
-            if (cooldowns.has(cleanPlate) && (now - cooldowns.get(cleanPlate) < 30000)) return;
+            if (cooldowns.has(clean) && (Date.now() - cooldowns.get(clean) < 30000)) return;
 
             const isMatch = (numValue === currentTarget);
-            const entry = {
-                plate: cleanPlate,
-                num: numValue,
-                image: img,
-                lat: lastPos?.latitude,
-                lon: lastPos?.longitude,
-                isMatch: isMatch,
-                time: new Date().toLocaleString('sv-SE')
-            };
+            const entry = { plate: clean, num: numValue, image: img, lat: lastPos?.latitude, lon: lastPos?.longitude, isMatch: isMatch, time: new Date().toLocaleString('sv-SE') };
 
             const tx = db.transaction("plates", "readwrite");
             tx.objectStore("plates").add(entry).onsuccess = () => {
-                cooldowns.set(cleanPlate, now);
+                cooldowns.set(clean, Date.now());
                 if (isMatch) {
-                    alert("TRÄFF! " + cleanPlate);
+                    alert("TRÄFF! " + clean);
                     currentTarget++;
-                    localStorage.setItem('plateTarget', currentTarget); // Spara automatiskt framsteg
+                    localStorage.setItem('plateTarget', currentTarget);
                     updateTargetUI();
                 }
             };
         }
 
-        // --- UI UPPDATERING ---
+        // --- MANUELLA FUNKTIONER ---
+        function setManualTarget() {
+            const val = prompt("Sätt nästa nummer (1-999):", currentTarget);
+            if (val) {
+                currentTarget = parseInt(val);
+                localStorage.setItem('plateTarget', currentTarget);
+                updateTargetUI();
+            }
+        }
+
         function updateTargetUI() {
             document.getElementById('target-num').innerText = currentTarget.toString().padStart(3, '0');
         }
 
+        // --- ARKIV-FIX (Edit & Delete) ---
         function deleteEntry(id) {
-            if (confirm("Vill du radera denna skanning?")) {
-                const tx = db.transaction("plates", "readwrite");
-                tx.objectStore("plates").delete(id).onsuccess = () => renderArchive();
+            if (confirm("Radera bild?")) {
+                db.transaction("plates", "readwrite").objectStore("plates").delete(id).onsuccess = () => renderArchive();
             }
         }
 
-        function editEntry(id, currentPlate) {
-            const newPlate = prompt("Redigera regnr (ABC123):", currentPlate);
+        function editEntry(id) {
+            const newPlate = prompt("Ange korrekt regnr (t.ex. OAX801):");
             if (newPlate && newPlate.length === 6) {
-                const tx = db.transaction("plates", "readwrite");
-                const store = tx.objectStore("plates");
-                store.get(id).onsuccess = e => {
+                const store = db.transaction("plates", "readwrite").objectStore("plates");
+                store.get(id).onsuccess = (e) => {
                     const data = e.target.result;
                     data.plate = newPlate.toUpperCase();
-                    data.num = parseInt(newPlate.substring(3));
+                    data.num = parseInt(data.plate.substring(3));
                     store.put(data).onsuccess = () => renderArchive();
                 };
             }
@@ -235,21 +234,18 @@
             db.transaction("plates", "readonly").objectStore("plates").getAll().onsuccess = e => {
                 const gallery = document.getElementById('gallery');
                 gallery.innerHTML = '';
-                e.target.result.reverse().filter(i => !filter || i.num.toString().padStart(3,'0').includes(filter)).forEach(item => {
+                e.target.result.reverse().filter(i => !filter || i.num.toString().includes(filter)).forEach(item => {
                     const card = document.createElement('div');
                     card.className = 'plate-card';
                     card.innerHTML = `
                         <img src="${item.image}">
                         <div class="plate-card-info">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                                <div>
-                                    <strong style="font-size:24px;">${item.plate}</strong>
-                                    <div style="font-size:11px; color:#888">${item.time}</div>
-                                </div>
-                                ${item.isMatch ? '<span style="color:var(--ios-green); font-size:10px; font-weight:bold;">● SERIE</span>' : ''}
+                            <div style="display:flex; justify-content:space-between;">
+                                <strong>${item.plate}</strong>
+                                <span style="font-size:10px; color:#888;">${item.time}</span>
                             </div>
                             <div class="actions">
-                                <button class="btn btn-edit" onclick="editEntry(${item.id}, '${item.plate}')">ÄNDRA</button>
+                                <button class="btn btn-edit" onclick="editEntry(${item.id})">ÄNDRA</button>
                                 <button class="btn btn-delete" onclick="deleteEntry(${item.id})">RADERA</button>
                                 <a href="https://www.google.com/maps?q=${item.lat},${item.lon}" target="_blank" class="btn btn-map">KARTA</a>
                             </div>
