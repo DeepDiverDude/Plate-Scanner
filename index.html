@@ -2,80 +2,127 @@
 <html lang="sv">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nummerplåts-skanner</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bilnummer-skanner</title>
     <style>
-        video { width: 100%; max-width: 500px; border-radius: 10px; }
-        .result { margin-top: 20px; padding: 10px; border: 1px solid #ccc; }
-        button { padding: 15px; font-size: 18px; background: #007AFF; color: white; border: none; border-radius: 8px; cursor: pointer; }
+        body { font-family: sans-serif; background: #121212; color: white; text-align: center; margin: 0; }
+        #container { position: relative; width: 100%; max-width: 500px; margin: auto; }
+        video { width: 100%; border-radius: 0 0 20px 20px; }
+        
+        /* Siktet för kameran */
+        #overlay {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 70%; height: 60px;
+            border: 2px solid #00ff00;
+            box-shadow: 0 0 20px rgba(0,255,0,0.5);
+            border-radius: 5px;
+            pointer-events: none;
+        }
+
+        .controls { padding: 20px; }
+        button { 
+            padding: 20px 40px; font-size: 18px; font-weight: bold;
+            background: #007AFF; color: white; border: none; border-radius: 50px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+        
+        #result-box { background: #222; margin: 15px; padding: 15px; border-radius: 15px; min-height: 100px; }
+        .plate-number { font-size: 28px; color: #00ff00; font-weight: bold; letter-spacing: 2px; }
+        .status { font-size: 14px; color: #aaa; }
     </style>
 </head>
 <body>
 
-    <h1>Bil-skanner</h1>
-    
-    <!-- Här visas kamerabilden -->
-    <video id="video" autoplay playsinline></video>
-    <br>
-    <button id="capture">Fånga bild & sök nummer</button>
-
-    <div class="result">
-        <p id="status">Status: Väntar...</p>
-        <p id="plate">Nummer: -</p>
-        <p id="location">Position: -</p>
-        <canvas id="canvas" style="display:none;"></canvas>
-        <img id="photo" style="width:100%; margin-top:10px; border-radius: 10px;">
+    <div id="container">
+        <video id="video" autoplay playsinline></video>
+        <div id="overlay"></div>
     </div>
 
-    <!-- Hämta biblioteket för textigenkänning (OCR) -->
+    <div class="controls">
+        <button id="capture">SKANNA SKYLT</button>
+    </div>
+
+    <div id="result-box">
+        <p id="status" class="status">Sikta mot skylten och tryck på knappen</p>
+        <p id="plate-display" class="plate-number">--- ---</p>
+        <p id="location-display" style="font-size: 12px; color: #888;"></p>
+    </div>
+
+    <canvas id="canvas" style="display:none;"></canvas>
+
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
     <script>
         const video = document.getElementById('video');
         const canvas = document.getElementById('canvas');
-        const photo = document.getElementById('photo');
         const status = document.getElementById('status');
-        const plateText = document.getElementById('plate');
-        const locationText = document.getElementById('location');
+        const plateDisplay = document.getElementById('plate-display');
+        const locationDisplay = document.getElementById('location-display');
 
-        // 1. Starta kameran (iPhone 15 Pro har fantastiska kameror!)
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
-            .then(stream => { video.srcObject = stream; })
-            .catch(err => { status.innerText = "Kamerafel: " + err; });
+        // Starta kameran med högsta möjliga upplösning på iPhone 15 Pro
+        navigator.mediaDevices.getUserMedia({ 
+            video: { 
+                facingMode: "environment",
+                width: { ideal: 1920 },
+                height: { ideal: 1080 }
+            } 
+        }).then(stream => { video.srcObject = stream; });
 
-        // 2. När användaren trycker på knappen
-        document.getElementById('capture').addEventListener('click', () => {
-            status.innerText = "Hämtar position och analyserar bild...";
-
-            // Hämta GPS
-            navigator.geolocation.getCurrentPosition(pos => {
+        document.getElementById('capture').addEventListener('click', async () => {
+            status.innerText = "Hämtar position...";
+            
+            // 1. Hämta position
+            navigator.geolocation.getCurrentPosition(async (pos) => {
                 const lat = pos.coords.latitude;
                 const lon = pos.coords.longitude;
-                locationText.innerText = `Position: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-                
-                // Skapa en länk till Google Maps
-                const mapsUrl = `https://www.google.com/maps?q=${lat},${lon}`;
-                locationText.innerHTML += ` <a href="${mapsUrl}" target="_blank">[Karta]</a>`;
+                locationDisplay.innerText = `Position: ${lat.toFixed(5)}, ${lon.toFixed(5)}`;
 
-                // Ta en bild från videon
-                const context = canvas.getContext('2d');
+                status.innerText = "Analyserar bild...";
+                
+                // 2. Ta bild och förbered canvas
+                const ctx = canvas.getContext('2d');
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
-                context.drawImage(video, 0, 0, canvas.width, canvas.height);
-                
-                const dataUrl = canvas.toDataURL('image/png');
-                photo.src = dataUrl;
+                ctx.drawImage(video, 0, 0);
 
-                // 3. Kör OCR för att hitta texten
-                Tesseract.recognize(dataUrl, 'eng') // 'eng' fungerar ofta bäst för svenska skyltar
-                    .then(({ data: { text } }) => {
-                        // Här kan vi använda Regex för att bara hitta svenska skyltar
-                        const cleanText = text.replace(/[^a-zA-Z0-9]/g, ' ');
-                        plateText.innerText = "Hittad text: " + cleanText;
-                        status.innerText = "Klar!";
-                    });
+                // 3. Bildbehandling (Gör området i siktet svartvitt för bättre OCR)
+                // (Här kan vi lägga till mer avancerad kod senare, men vi börjar så här)
+                const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+
+                // 4. Kör Tesseract med inställningar för svenska skyltar
+                // Vi använder "whitelist" för att bara leta efter A-Z och 0-9
+                const result = await Tesseract.recognize(dataUrl, 'eng', {
+                    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+                });
+
+                const rawText = result.data.text;
+                
+                // 5. REGEX: Leta efter svenska registreringsnummer i texten
+                // Mönster: 3 bokstäver, sen 2 siffror, sen 1 siffra eller bokstav
+                const swedishPlatePattern = /[A-Z]{3}\s?[0-9]{2}[A-Z0-9]{1}/g;
+                const foundPlates = rawText.toUpperCase().match(swedishPlatePattern);
+
+                if (foundPlates) {
+                    const cleanPlate = foundPlates[0].replace(/\s/g, ''); // Ta bort eventuella mellanrum
+                    plateDisplay.innerText = cleanPlate;
+                    status.innerText = "SKYLT HITTAD!";
+                    
+                    // Här kan vi senare lägga in logiken: "Är detta nummer 001?"
+                    checkSequence(cleanPlate);
+                } else {
+                    plateDisplay.innerText = "Försök igen";
+                    status.innerText = "Kunde inte tyda skylten. Prova att gå närmare.";
+                    console.log("Råtext från kameran:", rawText); // Logga vad den faktiskt såg
+                }
             });
         });
+
+        function checkSequence(plate) {
+            // Logik för turordning kommer härnäst!
+            console.log("Kontrollerar nummer:", plate);
+        }
     </script>
 </body>
 </html>
