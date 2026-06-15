@@ -3,33 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>PlateCollector Pro - Timeout Edition</title>
+    <title>PlateCollector v7 - GPS Fix</title>
     <style>
         :root { --ios-blue: #007AFF; --ios-green: #34C759; --ios-red: #FF3B30; }
         body { font-family: -apple-system, sans-serif; background: #000; color: #fff; margin: 0; }
         
-        /* Kamera */
-        #cam-box { position: sticky; top: 0; z-index: 100; background: #000; border-bottom: 1px solid #333; }
-        video { width: 100%; height: 35vh; object-fit: cover; }
-        #sikte { 
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            width: 75%; height: 60px; border: 2px solid var(--ios-green); border-radius: 10px; pointer-events: none;
-        }
-        #ai-preview { position: absolute; bottom: 5px; right: 5px; width: 100px; border: 1px solid #444; }
+        #cam-box { position: sticky; top: 0; z-index: 100; background: #000; height: 40vh; border-bottom: 1px solid #333; }
+        video { width: 100%; height: 100%; object-fit: cover; }
+        #sikte { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 80%; height: 60px; border: 2px solid var(--ios-green); border-radius: 10px; pointer-events: none; }
 
-        /* Dashboard */
-        .dash { padding: 10px; background: #1c1c1e; display: flex; justify-content: space-between; align-items: center; }
-        .target-box { background: var(--ios-red); padding: 5px 15px; border-radius: 8px; text-align: center; min-width: 80px; }
+        /* GPS Status Bar */
+        .gps-status { background: #1c1c1e; padding: 5px 15px; font-size: 11px; display: flex; justify-content: space-between; border-bottom: 1px solid #333; }
+        .gps-good { color: var(--ios-green); }
+        .gps-bad { color: var(--ios-red); }
+
+        .dash { padding: 12px; background: #1c1c1e; display: flex; justify-content: space-between; align-items: center; }
+        .target-box { background: var(--ios-red); padding: 8px 15px; border-radius: 10px; text-align: center; }
         
-        /* Sök & Galleri */
-        .search-area { padding: 10px; background: #1c1c1e; border-top: 1px solid #333; }
-        input { width: 100%; padding: 12px; box-sizing: border-box; border-radius: 10px; border: none; background: #3a3a3c; color: #fff; font-size: 16px; }
-        #gallery { padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .card { background: #1c1c1e; border-radius: 10px; overflow: hidden; position: relative; border: 1px solid #333; }
-        .card img { width: 100%; height: 100px; object-fit: cover; }
-        .card-info { padding: 8px; font-size: 11px; }
-        .match-badge { position: absolute; top: 5px; left: 5px; background: var(--ios-green); font-size: 9px; padding: 2px 5px; border-radius: 4px; font-weight: bold; }
-        .btn-map { display: block; text-align: center; background: var(--ios-blue); color: white; text-decoration: none; padding: 6px; margin-top: 5px; border-radius: 5px; font-size: 11px; }
+        #gallery { padding: 10px; }
+        .card { background: #1c1c1e; border-radius: 15px; overflow: hidden; margin-bottom: 15px; border: 1px solid #333; }
+        .card img { width: 100%; height: auto; display: block; }
+        .card-info { padding: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .btn-map { background: var(--ios-blue); color: white; text-decoration: none; padding: 10px 15px; border-radius: 8px; font-size: 12px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -37,193 +32,170 @@
 <div id="cam-box">
     <video id="video" autoplay playsinline></video>
     <div id="sikte"></div>
-    <canvas id="ai-preview"></canvas>
+</div>
+
+<div class="gps-status">
+    <span id="gps-label">GPS: Initierar...</span>
+    <span id="gps-accuracy">---</span>
 </div>
 
 <div class="dash">
     <div>
-        <div id="live-text" style="font-size: 18px; color: var(--ios-green); font-weight: bold;">Söker...</div>
-        <div id="status-extra" style="font-size: 10px; color: #aaa;">Sikta på en skylt</div>
+        <div id="live-text" style="font-size: 22px; color: var(--ios-green); font-weight: bold;">Söker...</div>
+        <div style="font-size: 10px; color: #888;">AI-skanning aktiv</div>
     </div>
     <div class="target-box">
-        <div style="font-size: 9px;">NÄSTA</div>
-        <div id="target-num" style="font-size: 24px; font-weight: bold;">001</div>
+        <div style="font-size: 10px;">NÄSTA</div>
+        <div id="target-num" style="font-size: 26px; font-weight: bold;">001</div>
     </div>
-</div>
-
-<div class="search-area">
-    <input type="text" id="search" placeholder="Sök bland sparade (t.ex. 007)..." oninput="renderGallery()">
 </div>
 
 <div id="gallery"></div>
 
-<canvas id="hidden-canvas" style="display:none;"></canvas>
+<canvas id="full-canvas" style="display:none;"></canvas>
+<canvas id="ocr-canvas" style="display:none;"></canvas>
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
     let db;
     let currentTarget = 1;
     let isProcessing = false;
-    // Håller koll på senast sparade tid för varje skylt i minnet
-    const plateCooldowns = new Map(); 
-    const COOLDOWN_MS = 5 * 60 * 1000; // 5 minuter i millisekunder
+    let lastPosition = null;
+    const plateCooldowns = new Map();
 
     const video = document.getElementById('video');
-    const aiCanvas = document.getElementById('ai-preview');
     const targetDisplay = document.getElementById('target-num');
-    const statusExtra = document.getElementById('status-extra');
+    const gpsLabel = document.getElementById('gps-label');
+    const gpsAccuracy = document.getElementById('gps-accuracy');
 
-    // 1. Öppna Databasen
-    const req = indexedDB.open("PlateCollectorDB", 1);
+    // --- 1. EXAKT GPS-SPÅRNING ---
+    // Vi startar en "watchPosition" som körs hela tiden i bakgrunden
+    if ("geolocation" in navigator) {
+        navigator.geolocation.watchPosition(
+            (pos) => {
+                lastPosition = pos.coords;
+                const acc = Math.round(pos.coords.accuracy);
+                gpsAccuracy.innerText = `Precision: +/- ${acc}m`;
+                
+                if (acc < 20) {
+                    gpsLabel.innerText = "GPS: BRA";
+                    gpsLabel.className = "gps-good";
+                } else {
+                    gpsLabel.innerText = "GPS: SÖKER BÄTTRE...";
+                    gpsLabel.className = "gps-bad";
+                }
+            },
+            (err) => { gpsLabel.innerText = "GPS FEL: " + err.message; },
+            { 
+                enableHighAccuracy: true, // TVINGA GPS-CHIP
+                maximumAge: 0,            // INGEN CACHAD DATA
+                timeout: 10000 
+            }
+        );
+    }
+
+    // --- 2. DB & KAMERA ---
+    const req = indexedDB.open("PlateCollectorV7", 1);
     req.onupgradeneeded = e => {
         const store = e.target.result.createObjectStore("plates", { keyPath: "id", autoIncrement: true });
         store.createIndex("plate", "plate", { unique: false });
     };
-    req.onsuccess = e => {
-        db = e.target.result;
-        updateTargetCounter();
-        renderGallery();
-    };
+    req.onsuccess = e => { db = e.target.result; updateTargetCounter(); renderGallery(); };
 
-    // 2. Starta Kameran
     navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: "environment", width: 1280, height: 720 } 
+        video: { facingMode: "environment", width: { ideal: 1920 } } 
     }).then(stream => { 
         video.srcObject = stream;
-        setInterval(scan, 1200); 
+        setInterval(capture, 1200); 
     });
 
-    async function scan() {
-        if (isProcessing || !db) return;
+    async function capture() {
+        if (isProcessing || !db || video.videoWidth === 0) return;
         isProcessing = true;
 
-        const vW = video.videoWidth;
-        const vH = video.videoHeight;
-        if(vW === 0) { isProcessing = false; return; }
+        const fullCanvas = document.getElementById('full-canvas');
+        fullCanvas.width = video.videoWidth; 
+        fullCanvas.height = video.videoHeight;
+        fullCanvas.getContext('2d').drawImage(video, 0, 0);
 
-        const canvas = document.getElementById('hidden-canvas');
-        canvas.width = vW; canvas.height = vH;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0);
-
-        // Klipp ut mitten (siktet)
-        const cW = vW * 0.7; const cH = vH * 0.2;
-        const cX = (vW - cW) / 2; const cY = (vH - cH) / 2;
-        aiCanvas.width = cW; aiCanvas.height = cH;
-        const aiCtx = aiCanvas.getContext('2d');
-        aiCtx.drawImage(canvas, cX, cY, cW, cH, 0, 0, cW, cH);
-
-        const dataUrl = aiCanvas.toDataURL('image/jpeg', 0.8);
+        // OCR-beskärning (samma som v6)
+        const ocrCanvas = document.getElementById('ocr-canvas');
+        const cW = fullCanvas.width * 0.8; const cH = fullCanvas.height * 0.2;
+        const cX = (fullCanvas.width - cW) / 2; const cY = (fullCanvas.height - cH) / 2;
+        ocrCanvas.width = cW; ocrCanvas.height = cH;
+        ocrCanvas.getContext('2d').drawImage(fullCanvas, cX, cY, cW, cH, 0, 0, cW, cH);
 
         try {
-            const result = await Tesseract.recognize(dataUrl, 'eng', {
+            const result = await Tesseract.recognize(ocrCanvas.toDataURL('image/jpeg', 0.8), 'eng', {
                 tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789',
                 tessedit_pageseg_mode: '7'
             });
             const text = result.data.text.trim().toUpperCase();
-            
             const match = text.match(/[A-Z]{3}[0-9]{2}[A-Z0-9]{1}/);
+            
             if (match) {
                 const plate = match[0];
                 document.getElementById('live-text').innerText = plate;
                 const num = parseInt(plate.match(/\d+/)[0]);
-                await processFoundPlate(plate, num, canvas.toDataURL('image/jpeg', 0.5));
-            } else {
-                document.getElementById('live-text').innerText = "Söker...";
-                statusExtra.innerText = "Sikta mot mitten";
+                await savePlate(plate, num, fullCanvas.toDataURL('image/jpeg', 0.6));
             }
         } catch (e) { console.error(e); }
         isProcessing = false;
     }
 
-    async function processFoundPlate(plate, num, fullImg) {
+    async function savePlate(plate, num, imageUri) {
         const now = Date.now();
-        
-        // --- TIMEOUT LOGIK ---
-        if (plateCooldowns.has(plate)) {
-            const lastSeen = plateCooldowns.get(plate);
-            if (now - lastSeen < COOLDOWN_MS) {
-                const remainingSecs = Math.round((COOLDOWN_MS - (now - lastSeen)) / 1000);
-                statusExtra.innerText = `Redan sparad (vänta ${Math.ceil(remainingSecs/60)} min)`;
-                return; // Avbryt - vi sparar inte bilden
-            }
-        }
+        if (plateCooldowns.has(plate) && (now - plateCooldowns.get(plate) < 300000)) return;
+        if (!lastPosition) { console.log("Väntar på GPS..."); return; }
 
         const tx = db.transaction("plates", "readwrite");
         const store = tx.objectStore("plates");
         
-        // Kolla antal dubletter i DB
         const countReq = store.index("plate").getAll(plate);
         countReq.onsuccess = () => {
-            const existing = countReq.result;
+            if (countReq.result.length >= 3) return;
+
             const isTarget = (num === currentTarget);
-
-            if (existing.length < 3) {
-                navigator.geolocation.getCurrentPosition(pos => {
-                    const entry = {
-                        plate,
-                        num,
-                        image: fullImg,
-                        lat: pos.coords.latitude,
-                        lon: pos.coords.longitude,
-                        isTarget,
-                        time: new Date().toLocaleString('sv-SE')
-                    };
-                    
-                    db.transaction("plates", "readwrite").objectStore("plates").add(entry);
-                    
-                    // Uppdatera cooldown-timern för denna skylt
-                    plateCooldowns.set(plate, now);
-                    statusExtra.innerText = "NY BILD SPARAD!";
-
-                    if (isTarget) {
-                        alert("HITTAD! " + plate);
-                        currentTarget++;
-                        updateTargetCounter();
-                    }
-                    renderGallery();
-                }, () => {
-                    alert("Kunde inte hämta GPS. Se till att platstjänster är på.");
-                });
-            } else if (isTarget) {
-                // Om vi redan har 3 bilder, men det råkar vara numret vi behöver för serien just nu
-                alert("Nummer " + plate + " står i tur! (Max 3 bilder uppnått)");
-                currentTarget++;
+            const entry = {
+                plate, num, image: imageUri,
+                lat: lastPosition.latitude, 
+                lon: lastPosition.longitude,
+                isTarget, time: new Date().toLocaleString('sv-SE')
+            };
+            
+            db.transaction("plates", "readwrite").objectStore("plates").add(entry).onsuccess = () => {
+                plateCooldowns.set(plate, now);
+                if (isTarget) alert("HITTAD! " + plate);
                 updateTargetCounter();
-                plateCooldowns.set(plate, now); // Även här sätter vi cooldown
-            }
+                renderGallery();
+            };
         };
     }
 
     function updateTargetCounter() {
-        const tx = db.transaction("plates", "readonly");
-        tx.objectStore("plates").getAll().onsuccess = e => {
+        db.transaction("plates", "readonly").objectStore("plates").getAll().onsuccess = e => {
             const hits = e.target.result.filter(i => i.isTarget).map(i => i.num);
-            let next = 1;
-            while(hits.includes(next)) next++;
+            let next = 1; while(hits.includes(next)) next++;
             currentTarget = next;
             targetDisplay.innerText = currentTarget.toString().padStart(3, '0');
         };
     }
 
     function renderGallery() {
-        const searchTerm = document.getElementById('search').value.toUpperCase();
-        const tx = db.transaction("plates", "readonly");
-        tx.objectStore("plates").getAll().onsuccess = e => {
+        db.transaction("plates", "readonly").objectStore("plates").getAll().onsuccess = e => {
             const gallery = document.getElementById('gallery');
             gallery.innerHTML = '';
-            const items = e.target.result.reverse();
-
-            items.filter(i => i.plate.includes(searchTerm)).forEach(item => {
+            e.target.result.reverse().forEach(item => {
                 const card = document.createElement('div');
                 card.className = 'card';
                 card.innerHTML = `
-                    ${item.isTarget ? '<div class="match-badge">🎯 TURORDNING</div>' : ''}
                     <img src="${item.image}">
                     <div class="card-info">
-                        <strong>${item.plate}</strong><br>
-                        ${item.time.split(' ')[1]} - ${item.time.split(' ')[0]}
-                        <a href="https://www.google.com/maps?q=${item.lat},${item.lon}" target="_blank" class="btn-map">KARTA</a>
+                        <div>
+                            <strong style="font-size:18px">${item.plate}</strong>
+                            <div style="font-size:10px; color:#888">${item.time}</div>
+                        </div>
+                        <a href="https://www.google.com/maps?q=${item.lat},${item.lon}" target="_blank" class="btn-map">📍 VISA PLATS</a>
                     </div>
                 `;
                 gallery.appendChild(card);
